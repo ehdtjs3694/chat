@@ -1,0 +1,105 @@
+package board;
+
+import java.io.File;
+import java.io.IOException;
+import javax.servlet.ServletException;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+import com.oreilly.servlet.MultipartRequest;
+import com.oreilly.servlet.multipart.DefaultFileRenamePolicy;
+import com.sun.xml.internal.fastinfoset.util.PrefixArray;
+
+
+/**
+ * Servlet implementation class UserProfileServlet
+ */
+
+public class BoardUpdateServlet extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+    
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		request.setCharacterEncoding("UTF-8");
+		response.setContentType("text/html; charset=UTF-8");
+		
+		MultipartRequest multi = null;
+		int fileMaxSize = 10 * 1024 * 1024;
+		String savePath = request.getRealPath("/upload").replace("\\\\", "/");
+		
+		try {
+			multi = new MultipartRequest(request, savePath, fileMaxSize, "UTF-8", new DefaultFileRenamePolicy());
+		} catch (Exception e) {
+			// TODO: handle exception
+			request.getSession().setAttribute("messageType", "오류 메세지");
+			request.getSession().setAttribute("messageContent", "파일 크기는 10MB를 넘을 수 없어요.");
+			response.sendRedirect("index.jsp");
+			return;
+		}
+		
+		String userID = multi.getParameter("userID");
+		HttpSession session = request.getSession();
+		
+		//다른 사람은 수정할 수 없도록 처리
+		if(!userID.equals((String) session.getAttribute("userID"))) {
+			session.setAttribute("messageType", "오류 메세지");
+			session.setAttribute("messageContent", "접근할 수 없어요.");
+			response.sendRedirect("index.jsp");
+			return;
+		}
+		
+		String boardID = multi.getParameter("boardID");
+		if(boardID == null || boardID.equals("")) {
+			session.setAttribute("messageType", "오류 메세지");
+			session.setAttribute("messageContent", "접근할 수 없어요.");
+			response.sendRedirect("index.jsp");
+			return;
+		}
+		
+		String boardTitle = multi.getParameter("boardTitle");
+		String boardContent = multi.getParameter("boardContent");
+		
+		if(boardTitle.equals("") || boardTitle == null || boardContent.equals("") || boardTitle == null) {
+			session.setAttribute("messageType", "오류 메세지");
+			session.setAttribute("messageContent", "내용을 모두 채워주세요.");
+			response.sendRedirect("boardWrite.jsp");
+			return;
+		}
+		BoardDAO boardDAO = new BoardDAO();
+		BoardDTO board = boardDAO.getBoard(boardID);
+		//자기 자신이 아닌 경우
+		if(!userID.equals(board.getUserID())) {
+			session.setAttribute("messageType", "오류 메세지");
+			session.setAttribute("messageContent", "접근할 수 없어요.");
+			response.sendRedirect("index.jsp");
+			return;
+		}
+		
+		String boardFile = "";
+		String boardRealFile = "";
+		File file = multi.getFile("boardFile");
+		
+		//파일을 새롭게 넣는 경우 기존파일을 없애준다.
+		if(file != null) {
+			 boardFile = multi.getOriginalFileName("boardFile");
+			 boardRealFile = file.getName();
+			 String prev = boardDAO.getRealFile(boardID);
+			 File prevFile = new File(savePath + "/" + prev);
+			 if(prevFile.exists()) {
+				 prevFile.delete();
+			 }
+		} else {
+			boardFile = boardDAO.getFile(boardID);
+			boardRealFile = boardDAO.getRealFile(boardID);
+		}
+		boardDAO.update(boardID, boardTitle, boardContent, boardFile, boardRealFile);
+		
+		request.getSession().setAttribute("messageType", "성공 메세지");
+		request.getSession().setAttribute("messageContent", "성공적으로 게시물이 수정되었습니다.");
+		response.sendRedirect("boardView.jsp");
+		return;
+	}
+
+}
